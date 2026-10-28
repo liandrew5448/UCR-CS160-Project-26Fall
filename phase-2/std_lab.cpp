@@ -6,6 +6,9 @@
 #include <string>
 #include <utility>
 #include <vector>
+#include <iostream>
+#include <mutex>
+#include <thread>
 
 struct CSRGraph {
     int num_vertices;
@@ -99,6 +102,8 @@ public:
         {
             uint32_t neighbor = g.edges[i];
 
+            std::lock_guard<std::mutex> lock(dist_mutex);
+
             if (dist_prev_[neighbor] == -1) {
                 dist_[neighbor] = next_dist;
                 tl_updated_[tid] = 1;
@@ -108,8 +113,8 @@ public:
 
     void PostRound() override {
         // TODO: combine and reset update flags, then update the snapshot.
-                any_updated_ = false;
-
+        any_updated_ = false;
+    
         for (uint8_t updated : tl_updated_) {
             if (updated) {
                 any_updated_ = true;
@@ -168,6 +173,7 @@ private:
     std::vector<int> dist_prev_;        // previous-round snapshot
     std::vector<uint8_t> tl_updated_;   // one update flag per thread; serial uses index 0
     bool any_updated_ = true;          // run the first round
+    std::mutex dist_mutex_
 };
 
 class Bfs : public PushAlgorithm {
@@ -190,12 +196,15 @@ public:
                 for(int i = g.offsets[v]; i < g.offsets[v + 1]; i++) {
                     unit8_t neighbor = g.edges[i];
 
+                    std::lock_guard<std::mutex> lock(dist_mutex);
+
                     if(dist_[neighbor] == -1) {
                         dist_[neighbor] = dist_[v] + 1;
                         next_tl_updated_.push_back(neighbor);
                     }
                 }
             }
+
             tl_updated_ = std::move(next_tl_updated_);
         }
     }
@@ -233,6 +242,7 @@ public:
 private:
     std::vector<int> dist_;             // current hop distances
     std::vector<uint8_t> tl_updated_;   // one update flag per thread; serial uses index 0
+    std::mutex dist_mutex_
 };
 
 
